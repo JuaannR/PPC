@@ -8,9 +8,13 @@ public class Client {
         // 1. preparar canal para enviar peticion
         PrintWriter salida = new PrintWriter(socket.getOutputStream(), true);
 
-        // escribimos la peticion HTTP basica
+        // peticion HTTP basica
         salida.println("GET / HTTP/1.1");
+        // cabeceras peticion
         salida.println("Host: localhost");
+        salida.println("User-Agent: Mozilla/5.0 (Java-Client");
+        salida.println("Accept: text/html");
+        salida.println("Connection: close");
         salida.println(); // linea en blanco final fin petición        
     }
 
