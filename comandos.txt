@@ -1,0 +1,3 @@
+// javac -d bin src/paquete/archivo.java     --> compilar
+// java -cp bin paquete.Archivo  --> ejecutar .class
+// ctrl + shift + P  ---> Format Document
