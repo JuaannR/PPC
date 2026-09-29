@@ -3,33 +3,45 @@ import java.io.*;
 import java.net.*;
 
 public class Client {
+
+    public static void enviarPeticionServer(Socket socket) throws IOException {
+        // 1. preparar canal para enviar peticion
+        PrintWriter salida = new PrintWriter(socket.getOutputStream(), true);
+
+        // escribimos la peticion HTTP basica
+        salida.println("GET / HTTP/1.1");
+        salida.println("Host: localhost");
+        salida.println(); // linea en blanco final fin petición        
+    }
+
+    public static void leerRespuestaServer(Socket socket) throws IOException {
+        // 1. canal para leer la respuesta del servidor
+        InputStreamReader lectorBytes = new InputStreamReader(socket.getInputStream());
+        BufferedReader lectorServer = new BufferedReader(lectorBytes);
+
+        // 2. leer respuesta linea a linea
+        String linea;
+        while((linea = lectorServer.readLine()) != null) {
+            System.out.println("Respuesta: " + linea);
+        }        
+    }
+
+
     public static void main(String[] args) {
     try {
         System.out.println("Conectando...");
 
-        // 1. conexión al servidor en puerto 8080
+        // conexión al servidor en puerto 8080
         Socket socket = new Socket("localhost", 8080);
         System.out.println("Conexion exitosa");
 
-        // 2. preparar canal para enviar petición
-        PrintWriter salida = new PrintWriter(socket.getOutputStream(), true);
+        // enviamos peticion
+        enviarPeticionServer(socket);
 
-        // escribimos la petición HTTP básica
-        salida.println("GET / HTTP/1.1");
-        salida.println("Host: localhost");
-        salida.println(); // linea en blanco final fin petición
+        // leemos la respuesta
+        leerRespuestaServer(socket);
 
-        // 3. canal para leer la respeusa del servidor
-        InputStreamReader lectorBytes = new InputStreamReader(socket.getInputStream());
-        BufferedReader lectorServer = new BufferedReader(lectorBytes);
-
-        // 4. leer respuesta linea a linea
-        String linea;
-        while((linea = lectorServer.readLine()) != null) {
-            System.out.println("Respuesta: " + linea);
-        }
-
-        // 5. cerrar conexion
+        // cerramos conexion
         socket.close();
         System.out.println("Conexion cerrada");
         
