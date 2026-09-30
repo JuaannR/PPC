@@ -111,9 +111,21 @@ public class Server {
         System.out.println("Version: " + version);
 
         String linea;
+        String cookieRecibida = null; //variable para guardar la cookie si existe
 
         while ((linea = lectorLineas.readLine()) != null && !linea.isEmpty()) {
             System.out.println(linea);
+
+            // Si la línea empieza por "Cookie:, la caputramos"
+            if (linea.startsWith("Cookie:")) {
+                cookieRecibida = linea.substring("Cookie:".length()).trim();
+            } 
+        }
+
+        if (cookieRecibida != null) {
+            System.out.println("Cookie detectada, valor: " + cookieRecibida);
+        } else {
+            System.out.println("Cliente no trae cookie");
         }
 
         return true;
@@ -129,6 +141,10 @@ public class Server {
         // 3. escribimos cabeceras
         respuesta.println("Server: ServidorJava-PPC/1.0");
         respuesta.println("Content-Type: text/html; charset=UTF-8");
+
+        // cabecera Cookie, simulamos cookie que guarde el carrito
+        respuesta.println("Set-Cookie: carrito=item1,item3; Path=/; HttpOnly");
+
         respuesta.println("Connection: close");
 
         // 4. linea en blanco para separar cabeceras con el cuerpo
