@@ -337,6 +337,10 @@ public class Server {
                 // nos quedamos esperando a que alguien se conecte
                 Socket cliente = server.accept();
                 System.out.println("Nuevo cliente conectado");
+                
+                // Lanzamos hilo independeinte para cada cliente
+                new Thread(() -> {
+                    try {
 
                 // procesar peticion y obtener mapa del carrito actual
                 Map<Integer, Integer> carritoCliente = obtenerPeticionCliente(cliente);
@@ -349,7 +353,10 @@ public class Server {
                 // cerrar conexión con cliente
                 cliente.close();
                 System.out.println("Conexion cerrada con el cliente");
-
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }).start();
             }
         } catch (IOException e) {
             e.printStackTrace();
