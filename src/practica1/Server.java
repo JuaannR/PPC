@@ -12,8 +12,9 @@ import java.util.Map;
 
 public class Server {
 
+    // variable global eliminada, prueba termianda
     //variable global para guardar el mapa del carrito del cliente actual <idProducto, cantidad>
-    private static Map<Integer, Integer> carritoActual = new HashMap<>();
+    //private static Map<Integer, Integer> carritoActual = new HashMap<>();
 
     // Método para enviar un error 400 (Bad Request)
     public static void enviarError400(Socket cliente) throws IOException {
@@ -61,7 +62,25 @@ public class Server {
         respuesta.println("</html>");
     }    
 
-    public static boolean obtenerPeticionCliente(Socket cliente) throws IOException {
+    // Convierte el Map del carrito en una cadena de IDs separados por comas para la cookie
+    public static String generarValorCookie(Map<Integer, Integer> carrito) {
+        StringBuilder sb = new StringBuilder();
+        boolean primero = true;
+        for (Map.Entry<Integer, Integer> entry : carrito.entrySet()) {
+            int id = entry.getKey();
+            int cantidad = entry.getValue();
+            for(int i = 0; i < cantidad; i++) {
+                if (!primero) {
+                    sb.append(",");
+                }
+                sb.append(id);
+                primero = false;
+            }
+        }
+        return sb.toString();
+    }
+
+    public static Map<Integer, Integer> obtenerPeticionCliente(Socket cliente) throws IOException {
         // 1. obtener flujo de bytes
         InputStream inputBytes = cliente.getInputStream();
 
@@ -78,7 +97,7 @@ public class Server {
         if (lineaPeticion == null || lineaPeticion.isEmpty()) {
             System.out.println("No se ha enviado una peticion");
             enviarError400(cliente);
-            return false;
+            return null;
         }
 
         //peticion es algo: "GET / HTTP/1.1"  ---> separamos por " " y procesamos
@@ -89,37 +108,75 @@ public class Server {
         if (partesPeticion.length != 3) {
             System.out.println("La peticion no tiene un formato esperado");
             enviarError400(cliente);
-            return false;
+            return null;
         }
+
 
         // comprobamos metodo soportado
         if (!partesPeticion[0].equals("GET") && !partesPeticion[0].equals("POST")) {
             System.out.println("Metodo no soportado, solo GET o POST");
             enviarError400(cliente);
-            return false;
+            return null;
         }
 
         // comprobamos version HTTP/1.0 o 1.1
         if (!partesPeticion[2].equals("HTTP/1.0") && !partesPeticion[2].equals("HTTP/1.1")) {
             System.out.println("Version no soportada, solo 1.0 o 1.1");
             enviarError400(cliente);
-            return false;
+            return null;
         }
 
-        // comprobamos recurso al que accedemos, de momento solo /
-        if (!partesPeticion[1].equals("/")) {
-            System.out.println("El recurso solicitado no existe");
+        // partesPeticion               [0]            [1]        [2]
+        // al hacer click en añadir --> GET /?accion=anadir&id=1 HTTP/1.1
+        // Separar recurso (ej: "/") de los parametros de la URL (ej: "accion=anadir&id=1")
+
+        String recursoCompleto = partesPeticion[1];  
+        String ruta = recursoCompleto;
+        String queryString = "";
+
+        // separamos por el ?
+        if (recursoCompleto.contains("?")) {
+            String[] partesUrl = recursoCompleto.split("\\?", 2);
+            ruta = partesUrl[0];  // ruta base, que debe ser "/"
+            queryString = partesUrl[1];  // "accion=anadir&id=1"
+        }
+
+        // Comrpobamos que la ruta base sea estrictamente "/"
+        if (!ruta.equals("/")) {
             enviarError404(cliente);
-            return false;
+            return null;
         }
 
-        String metodo = partesPeticion[0];  // GET o POST
-        String url = partesPeticion[1];     //   /
-        String version = partesPeticion[2]; // HTTP/1.1 o 1.0
-        System.out.println("Metodo: " + metodo);
-        System.out.println("Url: " + url);
-        System.out.println("Version: " + version);
+        //variables para extraer la acción solicitada por el usuario
+        String accion = null;
+        int idProductoParam = -1;
 
+        if (!queryString.isEmpty()) {
+            String[] parametros = queryString.split("&"); 
+
+            //parametros[0] = "accion=anadir"
+            //parametros[0] = "id=1"
+
+            for (String param : parametros) {
+                String[] par = param.split("=");
+
+                //par[0] = "accion" -- "id"
+                //par[1] = "anadir" -- "1"
+
+                if (par[0].equals("accion")) {
+                    accion = par[1];  // anadir 
+                } else if (par[0].equals("id")) {
+                    try {
+                        idProductoParam = Integer.parseInt(par[1]);  //convierte id a numero entero
+                    } catch (NumberFormatException e) {
+
+                    }
+                }
+            }
+        }
+
+
+        // leemos cabeceras buscando la cookie
         String linea;
         String cookieRecibida = null; //variable para guardar la cookie si existe
 
@@ -132,6 +189,9 @@ public class Server {
             } 
         }
 
+        // recuperamos el carrito actual desde la cookie recibida
+        Map<Integer, Integer> carritoActual = new HashMap<>();
+        
         if (cookieRecibida != null) {
             System.out.println("Cookie detectada, valor: " + cookieRecibida);
 
@@ -144,42 +204,90 @@ public class Server {
                 }
             }
 
-            // guardamos carrito en variable global
             carritoActual = CarritoUtils.parsearCarrito(cookieLimpia);
             System.out.println("Carrito parseado con exito: " + carritoActual);
 
-        } else {
-            System.out.println("Cliente no trae cookie");
-            carritoActual.clear();  //si no hay cookie, se vacia carrito
+        } 
+
+        // Modificamos el carrito segun la accion que haya indicado el usuario
+        if (accion != null && idProductoParam != -1) {
+            if (accion.equals("anadir")) {
+                //sumamos una unidad al producto indicado
+                carritoActual.put(idProductoParam, carritoActual.getOrDefault(idProductoParam, 0) + 1);
+                System.out.println("Accion: Anadido producto ID " + idProductoParam);
+            } else if (accion.equals("eliminar")) {
+                if (carritoActual.containsKey(idProductoParam)) {
+                    int cantidadActual = carritoActual.get(idProductoParam);
+                    if (cantidadActual > 1) {
+                        carritoActual.put(idProductoParam, cantidadActual - 1);
+                    } else {
+                        carritoActual.remove(idProductoParam);
+                    }
+                    System.out.print("Accion: Eliminado 1 producto ID " + idProductoParam);
+                }
+            }
+
+            // NUEVO: Redireccion HTTP 303 para limipar la URL y evitar bug de recarga de pagian
+            String valorCookieNuevo = generarValorCookie(carritoActual);
+            PrintWriter respuesta = new PrintWriter(cliente.getOutputStream(),true);
+            respuesta.println("HTTP/1.1 303 See Other");
+            respuesta.println("Server: ServidorJava-PPC/1.0");
+            respuesta.println("Set-Cookie: carrito=" + valorCookieNuevo + "; Path=/; HttpOnly");
+            respuesta.println("Location: /"); // Redirige a la raíz limpia
+            respuesta.println("Connection: close");
+            respuesta.println();
+            
+            // deolver null para que main no intente construir la respuesta HTML normal
+            return null;
         }
 
-        return true;
+        return carritoActual;
     }
 
-    public static void construirRespuesta(Socket cliente) throws IOException {
-        // 1. obtenemos flujo de salida y creamos PrintWriter (true vacia el buffer)
+    public static void construirRespuesta(Socket cliente, Map<Integer, Integer> carritoActual) throws IOException {
+        // obtenemos flujo de salida y creamos PrintWriter (true vacia el buffer)
         PrintWriter respuesta = new PrintWriter(cliente.getOutputStream(), true);
 
-        // 2. escribimos la respuesta, acierto o error (suponemos acierto)
-        respuesta.println("HTTP/1.1 200 OK");
+        //generamos el valora actualizado de la cookie a partir del mapa actual
+        String valorCookieNuevo = generarValorCookie(carritoActual);
 
-        // 3. escribimos cabeceras
+        // escribimos la respuesta y cabeceras
+        respuesta.println("HTTP/1.1 200 OK");
         respuesta.println("Server: ServidorJava-PPC/1.0");
         respuesta.println("Content-Type: text/html; charset=UTF-8");
 
-        // cabecera Cookie, simulamos cookie que guarde el carrito
-        respuesta.println("Set-Cookie: carrito=1,1,1,2,3; Path=/; HttpOnly");
-
+        // cabecera Cookie, enviamos la nueva cookie actualizada al navegador
+        respuesta.println("Set-Cookie: carrito=" + valorCookieNuevo + "; Path=/; HttpOnly");
         respuesta.println("Connection: close");
 
-        // 4. linea en blanco para separar cabeceras con el cuerpo
+        // linea en blanco para separar cabeceras con el cuerpo
         respuesta.println();
         
-        // 5. Escribimos el cuerpo de la respuesta en HTML de forma dinámica
+        // Cuerpo HTML
         respuesta.println("<html>");
-        respuesta.println("<head><title>ola</title></head>");
+        respuesta.println("<head><title>Tienda Online - Carrito PPC</title></head>");
         respuesta.println("<body>");
-        respuesta.println("<h1>Tu Carrito de la compra</h1>");
+        respuesta.println("<h1>Tienda Online (Practica 1 PPC)</h1>");
+
+        // 1. SECCIÓN CATALOGO
+        respuesta.println("<h2>Catálogo de Productos</h2>");
+        respuesta.println("<ul>");
+        // Recorremos todos los productos disponibles en el catálogo global
+        for (Map.Entry<Integer, Producto> entry : Catalogo.obtenerTodosProductos().entrySet()) {
+            Producto p = entry.getValue();
+            respuesta.println("<li>");
+            respuesta.println(p.getNombre() + " - " + p.getPrecio() + "€ ");
+            // Enlace para añadir este producto específico (llama a la URL con parámetros)
+            respuesta.println("<a href='/?accion=anadir&id=" + p.getId() + "'>[+] Añadir</a> ");
+            // Enlace para eliminar este producto específico
+            respuesta.println("<a href='/?accion=eliminar&id=" + p.getId() + "'>[-] Quitar</a>");
+            respuesta.println("</li>");
+        }
+        respuesta.println("</ul>");
+
+        // 2. SECCIÓN DEL CARRITO DE COMPRA
+
+        respuesta.println("<h2>Tu Carrito de la compra</h2>");
 
         // Recorremos el mapa carritoActual para pintar los productos
         double granTotal = 0.0;
@@ -222,6 +330,7 @@ public class Server {
 
             //servidor creado en puerto 8080
             ServerSocket server = new ServerSocket(8080);
+            System.out.println("Servidor HTTP iniciado en el puerto 8080...");
 
             while (true) {
 
@@ -229,21 +338,17 @@ public class Server {
                 Socket cliente = server.accept();
                 System.out.println("Nuevo cliente conectado");
 
-                // una vez se conecta un cliente -> leemos petición
-                // dentro de if porque obtenerPeticionCliente es bool
-                // Solo mandamos respuesta DESDE AQUI si es 200 OK
-                // si es error se hace desde dentro del propio metodo
-                
-                if (obtenerPeticionCliente(cliente)) {
-                    // una vez terminamos de leer -> construimos la respuesta            
-                    construirRespuesta(cliente);
+                // procesar peticion y obtener mapa del carrito actual
+                Map<Integer, Integer> carritoCliente = obtenerPeticionCliente(cliente);
+
+                // si el mapa no es null (no hubi error 400/404) construimos respuesta enviando carrito
+                if (carritoCliente != null) {
+                    construirRespuesta(cliente, carritoCliente);
                 }
 
                 // cerrar conexión con cliente
                 cliente.close();
                 System.out.println("Conexion cerrada con el cliente");
-                
-
 
             }
         } catch (IOException e) {
