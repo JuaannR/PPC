@@ -1,9 +1,19 @@
 package practica1;
 
-import java.io.*;
-import java.net.*;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.PrintWriter;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.util.HashMap;
+import java.util.Map;
 
 public class Server {
+
+    //variable global para guardar el mapa del carrito del cliente actual <idProducto, cantidad>
+    private static Map<Integer, Integer> carritoActual = new HashMap<>();
 
     // Método para enviar un error 400 (Bad Request)
     public static void enviarError400(Socket cliente) throws IOException {
@@ -124,8 +134,23 @@ public class Server {
 
         if (cookieRecibida != null) {
             System.out.println("Cookie detectada, valor: " + cookieRecibida);
+
+            // limpiamos la parte de "carrito=" si la trae
+            String cookieLimpia = cookieRecibida;
+            if (cookieLimpia.contains("carrito=")) {
+                String[] partesCookie = cookieRecibida.split("=");
+                if (partesCookie.length > 1 ) {
+                    cookieLimpia = partesCookie[1].trim();
+                }
+            }
+
+            // guardamos carrito en variable global
+            carritoActual = CarritoUtils.parsearCarrito(cookieLimpia);
+            System.out.println("Carrito parseado con exito: " + carritoActual);
+
         } else {
             System.out.println("Cliente no trae cookie");
+            carritoActual.clear();  //si no hay cookie, se vacia carrito
         }
 
         return true;
@@ -143,20 +168,49 @@ public class Server {
         respuesta.println("Content-Type: text/html; charset=UTF-8");
 
         // cabecera Cookie, simulamos cookie que guarde el carrito
-        respuesta.println("Set-Cookie: carrito=item1,item3; Path=/; HttpOnly");
+        respuesta.println("Set-Cookie: carrito=1,1,1,2,3; Path=/; HttpOnly");
 
         respuesta.println("Connection: close");
 
         // 4. linea en blanco para separar cabeceras con el cuerpo
         respuesta.println();
-
-        // 5. Escribimos el cuerpo de la respuesta en HTML
+        
+        // 5. Escribimos el cuerpo de la respuesta en HTML de forma dinámica
         respuesta.println("<html>");
         respuesta.println("<head><title>ola</title></head>");
         respuesta.println("<body>");
-        respuesta.println("<h1>Odio Java y la FIUM chicos</h1>");
-        respuesta.println("<h1>Odio mucho a Maria :(</h1>");
-        respuesta.println("<p>Si lees esto es porque funciona :)</p>");
+        respuesta.println("<h1>Tu Carrito de la compra</h1>");
+
+        // Recorremos el mapa carritoActual para pintar los productos
+        double granTotal = 0.0;
+
+        if (carritoActual.isEmpty()) {
+            respuesta.println("<p>El carrito está vacío.</p>");
+        } else {
+            respuesta.println("<ul>");
+            for (Map.Entry<Integer, Integer> entry : carritoActual.entrySet()) {
+                int idProducto = entry.getKey();
+                int cantidad = entry.getValue();
+
+                //obtenemos el producto del catalogo
+                Producto producto = Catalogo.obtenerProductoId(idProducto);
+
+                if (producto != null) {
+                    double subtotal = producto.getPrecio() * cantidad;
+                    granTotal = granTotal + subtotal;
+
+                    String subtotalFormateado = String.format(java.util.Locale.US, "%.2f", subtotal);
+                    
+
+                    respuesta.println("<li>" + producto.getNombre() + " x " + cantidad + " unidades — Subtotal: " + subtotalFormateado + "€</li>");
+                }
+
+            }
+            String granTotalFormateado = String.format(java.util.Locale.US, "%.2f", granTotal);
+            respuesta.println("</ul>");
+            respuesta.println("<h3>Precio Total: " + granTotalFormateado + "€</h3>"); 
+        }
+
         respuesta.println("</body>");
         respuesta.println("</html>");        
     }
