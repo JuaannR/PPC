@@ -5,5 +5,5 @@
 *.csr
 *.crt
 
-demoCA/private
+demoCA/
 
