@@ -1,0 +1,9 @@
+*.ks
+*.jks
+*.p12
+*.pem
+*.csr
+*.crt
+
+demoCA/private
+
