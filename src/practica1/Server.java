@@ -1,20 +1,63 @@
 package practica1;
 
 import java.io.BufferedReader;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.security.KeyStore;
 import java.util.HashMap;
 import java.util.Map;
 
+import javax.net.ssl.*;
+
 public class Server {
 
-    // variable global eliminada, prueba termianda
-    //variable global para guardar el mapa del carrito del cliente actual <idProducto, cantidad>
-    //private static Map<Integer, Integer> carritoActual = new HashMap<>();
+    private static final String KEYSTORE_FILE = "servidor.ks";
+    private static final char[] KEYSTORE_PWD = "alumno".toCharArray();
+
+    // función dedicada a configurar y levantar el SSLServerSocket
+    public static SSLServerSocket inicializarServidorSeguro(int puerto) {
+        try {
+
+        // 1. cargar el KeyStore
+        KeyStore ks = KeyStore.getInstance("JKS"); 
+
+        try (FileInputStream fis = new FileInputStream(KEYSTORE_FILE)) {
+            ks.load(fis, KEYSTORE_PWD);
+        }
+
+        // 2. configurar KeyManagerFactory con credenciales del servior
+        KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+        kmf.init(ks, KEYSTORE_PWD);
+
+        // 3. configurar TrustManagerFactory para confiar en los clientes firmados por nuestra CA
+        TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+        tmf.init(ks);
+        
+        // 4. inicializar el contexto SSL con TLSv1.2
+        SSLContext ctx = SSLContext.getInstance("TLSv1.2");
+        ctx.init(kmf.getKeyManagers(), tmf.getTrustManagers(), null);
+
+        // 5. crear la fabrica de sockets seguros y levantar el servidor
+        SSLServerSocketFactory fac = ctx.getServerSocketFactory();
+        SSLServerSocket server = (SSLServerSocket) fac.createServerSocket(puerto);
+
+        // 6. activar mTLS: exigir y verificar el certificado del cliente
+        server.setNeedClientAuth(true);
+
+        System.out.println("Servidor e-commerce HTPPS/mTLS configurado correctamente");
+        return server;
+
+    } catch (Exception e) {
+        System.err.println("Error al inicializar la seguridad del servidor");
+        e.printStackTrace();
+        return null;
+    }
+}
 
     // Método para enviar un error 400 (Bad Request)
     public static void enviarError400(Socket cliente) throws IOException {
@@ -326,17 +369,23 @@ public class Server {
 
 
     public static void main(String[] args) {
-        try {
+        int puerto = 4430; //puerto seguro HTTPS
 
-            //servidor creado en puerto 8080
-            ServerSocket server = new ServerSocket(8080);
-            System.out.println("Servidor HTTP iniciado en el puerto 8080...");
+        try (SSLServerSocket server = inicializarServidorSeguro(puerto)) {
+
+            if (server == null) {
+                System.out.println("Error: No se pudo iniciar el servidor seguro");
+                return;
+            }
+
+            System.out.println("Servidor e-commerce HTTPS/mTLS inicado en el puerto " + puerto + " ...");
 
             while (true) {
 
                 // nos quedamos esperando a que alguien se conecte
+                // accept devolverá conexiones cifradas de tipo SSLSocket
                 Socket cliente = server.accept();
-                System.out.println("Nuevo cliente conectado");
+                System.out.println("Nuevo cliente conectado de manera segura");
                 
                 // Lanzamos hilo independeinte para cada cliente
                 new Thread(() -> {
@@ -352,9 +401,9 @@ public class Server {
 
                 // cerrar conexión con cliente
                 cliente.close();
-                System.out.println("Conexion cerrada con el cliente");
+                System.out.println("Conexion segura cerrada con el cliente");
                     } catch (Exception e) {
-                        e.printStackTrace();
+                        //e.printStackTrace();
                     }
                 }).start();
             }
