@@ -4,6 +4,9 @@
 *.pem
 *.csr
 *.crt
-
+*.cnf
+bin/
+*.class
+src/prueba/
 demoCA/
 
