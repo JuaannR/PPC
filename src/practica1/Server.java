@@ -253,7 +253,7 @@ public class Server {
         } 
 
         // Modificamos el carrito segun la accion que haya indicado el usuario
-        if (accion != null && idProductoParam != -1) {
+        if (accion != null && (idProductoParam != -1 || accion.equals("vaciar"))) {
             if (accion.equals("anadir")) {
                 //sumamos una unidad al producto indicado
                 carritoActual.put(idProductoParam, carritoActual.getOrDefault(idProductoParam, 0) + 1);
@@ -268,6 +268,9 @@ public class Server {
                     }
                     System.out.print("Accion: Eliminado 1 producto ID " + idProductoParam);
                 }
+            } else if (accion.equals("vaciar")) {
+                carritoActual.clear();
+                System.out.println("Acción: Carrito vaciado");
             }
 
             // NUEVO: Redireccion HTTP 303 para limipar la URL y evitar bug de recarga de pagian
@@ -338,6 +341,8 @@ public class Server {
         if (carritoActual.isEmpty()) {
             respuesta.println("<p>El carrito está vacío.</p>");
         } else {
+            //extra boton vaciar carrito
+            respuesta.println("<p><a href='/?accion=vaciar'>[X] Vaciar Carrito</a></p>");
             respuesta.println("<ul>");
             for (Map.Entry<Integer, Integer> entry : carritoActual.entrySet()) {
                 int idProducto = entry.getKey();
