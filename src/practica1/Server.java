@@ -313,7 +313,7 @@ public class Server {
         respuesta.println("<html>");
         respuesta.println("<head><title>Tienda Online - Carrito PPC</title></head>");
         respuesta.println("<body>");
-        respuesta.println("<h1>Tienda Online (Practica 1 PPC)</h1>");
+        respuesta.println("<h1>Tienda Online e-commerce (Practica 1 PPC)</h1>");
 
         // 1. SECCIÓN CATALOGO
         respuesta.println("<h2>Catálogo de Productos</h2>");
