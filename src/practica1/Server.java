@@ -143,6 +143,7 @@ public class Server {
             return null;
         }
 
+        System.out.println("Petición recibida: " + lineaPeticion);
         //peticion es algo: "GET / HTTP/1.1"  ---> separamos por " " y procesamos
         String[] partesPeticion = lineaPeticion.split(" ");
 
@@ -373,44 +374,52 @@ public class Server {
 
 
 
+    // Método auxiliar para procesar el cliente en un hilo independiente (sirve para ambos puertos)
+    private static void atenderClienteAsync(Socket cliente) {
+        new Thread(() -> {
+            try {
+                Map<Integer, Integer> carritoCliente = obtenerPeticionCliente(cliente);
+                if (carritoCliente != null) {
+                    construirRespuesta(cliente, carritoCliente);
+                }
+                cliente.close();
+            } catch (Exception e) {
+                // e.printStackTrace();
+            }
+        }).start();
+    }
+
     public static void main(String[] args) {
-        int puerto = 4430; //puerto seguro HTTPS
+        int puertoHttps = 4430;
+        int puertoHttp = 8080;
 
-        try (SSLServerSocket server = inicializarServidorSeguro(puerto)) {
+        // 1. HILO SECUNDARIO: Servidor HTTP plano en el puerto 8080 (para el Cliente Java / Escenario 1)
+        new Thread(() -> {
+            try (ServerSocket serverHttp = new ServerSocket(puertoHttp)) {
+                System.out.println("Servidor e-commerce HTTP plano iniciado en el puerto " + puertoHttp + " ...");
+                while (true) {
+                    Socket cliente = serverHttp.accept();
+                    System.out.println("Nuevo cliente HTTP plano conectado");
+                    atenderClienteAsync(cliente);
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }).start();
 
+        // 2. HILO PRINCIPAL: Servidor HTTPS/mTLS en el puerto 4430 (para Firefox / Escenario 3)
+        try (SSLServerSocket server = inicializarServidorSeguro(puertoHttps)) {
             if (server == null) {
                 System.out.println("Error: No se pudo iniciar el servidor seguro");
                 return;
             }
 
-            System.out.println("Servidor e-commerce HTTPS/mTLS inicado en el puerto " + puerto + " ...");
+            System.out.println("Servidor e-commerce HTTPS/mTLS iniciado en el puerto " + puertoHttps + " ...");
 
             while (true) {
-
-                // nos quedamos esperando a que alguien se conecte
-                // accept devolverá conexiones cifradas de tipo SSLSocket
                 Socket cliente = server.accept();
-                System.out.println("Nuevo cliente conectado de manera segura");
-                
-                // Lanzamos hilo independeinte para cada cliente
-                new Thread(() -> {
-                    try {
-
-                // procesar peticion y obtener mapa del carrito actual
-                Map<Integer, Integer> carritoCliente = obtenerPeticionCliente(cliente);
-
-                // si el mapa no es null (no hubi error 400/404) construimos respuesta enviando carrito
-                if (carritoCliente != null) {
-                    construirRespuesta(cliente, carritoCliente);
-                }
-
-                // cerrar conexión con cliente
-                cliente.close();
-                System.out.println("Conexion segura cerrada con el cliente");
-                    } catch (Exception e) {
-                        //e.printStackTrace();
-                    }
-                }).start();
+                System.out.println("Nuevo cliente conectado de manera segura (mTLS)");
+                atenderClienteAsync(cliente);
             }
         } catch (IOException e) {
             e.printStackTrace();
